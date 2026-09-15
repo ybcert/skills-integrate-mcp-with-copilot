@@ -3,6 +3,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const loginButton = document.getElementById("login-button");
+  const logoutButton = document.getElementById("logout-button");
+  const loginDialog = document.getElementById("login-dialog");
+  const loginForm = document.getElementById("login-form");
+  const loginPrompt = document.getElementById("login-prompt");
+  const loggedIn = document.getElementById("logged-in");
+  const teacherName = document.getElementById("teacher-name");
+
+  let isTeacher = false;
+
+  function updateAuthUI(username) {
+    isTeacher = Boolean(username);
+    loginButton.classList.toggle("hidden", isTeacher);
+    loggedIn.classList.toggle("hidden", !isTeacher);
+    loginPrompt.classList.toggle("hidden", isTeacher);
+    signupForm.classList.toggle("hidden", !isTeacher);
+    teacherName.textContent = isTeacher ? `Logged in as ${username}` : "";
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -30,7 +48,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${
+                        isTeacher
+                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
+                          : ""
+                      }</li>`
                   )
                   .join("")}
               </ul>
@@ -64,6 +86,16 @@ document.addEventListener("DOMContentLoaded", () => {
       activitiesList.innerHTML =
         "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
+    }
+  }
+
+  async function checkLogin() {
+    const response = await fetch("/auth/me");
+    if (response.ok) {
+      const result = await response.json();
+      updateAuthUI(result.username);
+    } else {
+      updateAuthUI(null);
     }
   }
 
@@ -155,6 +187,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  loginButton.addEventListener("click", () => loginDialog.showModal());
+
+  document.getElementById("cancel-login").addEventListener("click", () => {
+    loginDialog.close();
+    loginForm.reset();
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+
+    const result = await response.json();
+    if (response.ok) {
+      updateAuthUI(result.username);
+      loginDialog.close();
+      loginForm.reset();
+      fetchActivities();
+    } else {
+      messageDiv.textContent = result.detail || "Unable to log in";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+    }
+  });
+
+  logoutButton.addEventListener("click", async () => {
+    await fetch("/logout", { method: "POST" });
+    updateAuthUI(null);
+    fetchActivities();
+  });
+
   // Initialize app
-  fetchActivities();
+  checkLogin().then(fetchActivities);
 });
